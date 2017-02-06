@@ -25,7 +25,7 @@
 
 
 
-(defn init! [s state-map dep-graph]
+(defn start! [s state-map dep-graph]
   (check-args state-map dep-graph)
   (let [deps (graph-sort dep-graph)]
     (assert (cs/subset? (set deps) (set (keys state-map))) "state-map doesn't have all the necessary states present in dep-graph")

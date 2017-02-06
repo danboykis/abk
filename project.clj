@@ -1,4 +1,4 @@
-(defproject com.danboykis/abk "0.1.0-SNAPSHOT"
+(defproject com.danboykis/abk "0.1.0"
   :description "One atom state management for clojure apps"
   :url "http://github.com/danboykis/abk"
   :license {:name "Unlicense"

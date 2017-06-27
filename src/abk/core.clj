@@ -1,7 +1,7 @@
 (ns abk.core
   (:require [abk.dag :refer [graph-sort]]
             [clojure.set :as cs]
-            [clojure.spec :as s]))
+            [clojure.spec.alpha :as s]))
 
 (s/def ::state-map (s/map-of keyword? (s/and vector? #(= 3 (count %)) #(and (fn? (nth % 0))
                                                                             (fn? (nth % 1))
@@ -23,6 +23,8 @@
     (cond-> new-s
             (empty? (::started new-s)) (dissoc new-s ::started))))
 
+(defn- run-state! [start-fn! state]
+  (try (start-fn! state) (catch Exception e {::error e ::partial-state state})))
 
 
 (defn start! [s state-map dep-graph]
@@ -32,10 +34,13 @@
     (loop [ss s
            [head-dep & tails-deps] deps]
       (if-not (nil? head-dep)
-        (let [[start! _ k](get state-map head-dep)]
-          (recur (-> (assoc ss k (start! ss))
-                     (add-started head-dep))
-                 tails-deps))
+        (let [[start! _ k](get state-map head-dep)
+              started-state (run-state! start! ss)]
+          (if (::error started-state)
+            started-state
+            (recur (-> (assoc ss k started-state)
+                       (add-started head-dep))
+                   tails-deps)))
         ss))))
 
 (defn stop! [s state-map dep-graph]

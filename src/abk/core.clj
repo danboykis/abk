@@ -23,8 +23,8 @@
     (cond-> new-s
             (empty? (::started new-s)) (dissoc new-s ::started))))
 
-(defn- run-state! [start-fn! state]
-  (try (start-fn! state) (catch Exception e {::error e ::partial-state state})))
+(defn- run-state! [start-fn! state k]
+  (try (start-fn! state k) (catch Exception e {::error e ::partial-state state})))
 
 
 (defn start! [s state-map dep-graph]
@@ -35,7 +35,7 @@
            [head-dep & tails-deps] deps]
       (if-not (nil? head-dep)
         (let [[start! _ k](get state-map head-dep)
-              started-state (run-state! start! ss)]
+              started-state (run-state! start! ss k)]
           (if (::error started-state)
             started-state
             (recur (-> (assoc ss k started-state)

@@ -3,56 +3,51 @@
             [clojure.set :as cs]
             [clojure.spec.alpha :as s]))
 
-(s/def ::state-map (s/map-of keyword? (s/and vector? #(= 3 (count %)) #(and (fn? (nth % 0))
-                                                                            (fn? (nth % 1))
-                                                                            (keyword? (nth % 2))))))
+(s/def ::states (s/map-of keyword? (s/and vector? #(= 2 (count %)) #(and (fn? (first %))
+                                                                         (fn? (second %))))))
 
+(s/def ::graph (s/keys :req [::dep-graph ::states]))
 (s/def ::dep-graph (s/coll-of #(or (keyword? %) (vector? %))))
 
-(defn- check-args [state-map dep-graph]
-  (when-not (s/valid? ::state-map state-map)
-    (throw (ex-info "not a valid state-map" (s/explain-data ::state-map state-map))))
-  (when-not (s/valid? ::dep-graph dep-graph)
-    (throw (ex-info "invalid graph structure" (s/explain-data ::dep-graph dep-graph)))))
+(defn- check-args [graph]
+  (when-not (s/valid? ::graph graph)
+    (throw (ex-info "not a valid graph" (s/explain-data ::graph graph)))))
 
 (defn- add-started [s dep]
   (update s ::started (fnil conj []) dep))
 
 (defn- remove-started [s dep]
-  (let [new-s (update s ::started #(vec (remove #{dep} %)))]
-    (cond-> new-s
-            (empty? (::started new-s)) (dissoc new-s ::started))))
+  (update s ::started #(vec (remove #{dep} %))))
 
 (defn- run-state! [start-fn! state k]
   (try (start-fn! state k) (catch Exception e {::error e ::partial-state state})))
 
-
-(defn start! [s state-map dep-graph]
-  (check-args state-map dep-graph)
+(defn start! [s {:keys [::dep-graph ::states] :as g}]
+  (check-args g)
   (let [deps (graph-sort dep-graph)]
-    (assert (cs/subset? (set deps) (set (keys state-map))) "state-map doesn't have all the necessary states present in dep-graph")
+    (assert (cs/subset? (set deps) (set (keys states))) "state-map doesn't have all the necessary states present in dep-graph")
     (loop [ss s
            [head-dep & tails-deps] deps]
       (if-not (nil? head-dep)
-        (let [[start! _ k](get state-map head-dep)
-              started-state (run-state! start! ss k)]
+        (let [[start! _] (get states head-dep)
+              started-state (run-state! start! ss head-dep)]
           (if (::error started-state)
             started-state
-            (recur (-> (assoc ss k started-state)
+            (recur (-> (assoc ss head-dep started-state)
                        (add-started head-dep))
                    tails-deps)))
         ss))))
 
-(defn stop! [s state-map dep-graph]
-  (check-args state-map dep-graph)
+(defn stop! [s {:keys [::dep-graph ::states] :as g}]
+  (check-args g)
   (let [deps (reverse (graph-sort dep-graph))]
-    (assert (cs/subset? (set deps) (set (keys state-map))) "state-map doesn't have all the necessary states present in dep-graph")
+    (assert (cs/subset? (set deps) (set (keys states))) "state-map doesn't have all the necessary states present in dep-graph")
     (loop [ss s
            [head-dep & tails-deps] deps]
       (if-not (nil? head-dep)
-        (let [[_ stop! k](get state-map head-dep)]
-          (recur (do (stop! (get ss k))
-                     (-> (dissoc ss k)
+        (let [[_ stop!] (get states head-dep)]
+          (recur (do (stop! (get ss head-dep))
+                     (-> (dissoc ss head-dep)
                          (remove-started head-dep)))
                  tails-deps))
         ss))))

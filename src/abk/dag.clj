@@ -1,36 +1,32 @@
 (ns abk.dag
-  (:require [clojure.set :as s]
-            [clojure.set :as set]))
+  (:import [java.util ArrayDeque]))
 
-(defn- c-edges [m]
-  (into #{} (comp (map :abk.core/deps) cat) (vals m)))
+(defn- visit [sorted g-ref node]
+  (let [node-v (get @g-ref node)]
+    (cond (= ::perm (::mark node-v)) sorted
+          (= ::temp (::mark node-v))
+          (throw (ex-info "invalid dag" {node (dissoc node-v ::mark)}))
+          :else
+          (do
+            (vswap! g-ref assoc-in [node ::mark] ::temp)
+            (doseq [dep-node (get node-v :abk.core/deps)]
+                (visit sorted g-ref dep-node))
+            (vswap! g-ref assoc-in [node ::mark] ::perm)
+            (.addFirst sorted node)))))
 
-(defn- incoming-edges [m]
-  (let [ik (c-edges m)]
-    (into (list) (remove ik) (keys m))))
-
-(defn- topo-sort [graph]
-  (loop [m  graph
-         s  (incoming-edges m)
-         sorted []]
-    (if-not (empty? s)
-      (let [[head-node & tail-nodes] s
-            node-edges (-> m (get head-node) :abk.core/deps)
-            smaller-m  (dissoc m head-node)
-            edges      (c-edges smaller-m)]
-        (recur
-          smaller-m
-          (reduce (fn [accum e]
-                    (if-not (contains? edges e)
-                      (cons e accum)
-                      accum))
-                  tail-nodes
-                  node-edges)
-          (conj sorted head-node)))
-      sorted)))
+(defn- transform [g]
+  (let [ks (set (keys g))]
+    (into {} (map (fn [[k {:abk.core/keys [deps] :as v}]]
+                    (if (= :abk.core/everything deps)
+                      [k (assoc v :abk.core/deps (disj ks k))]
+                      [k v])))
+          g)))
 
 (defn graph-sort [g]
-  (let [sorted (topo-sort g)]
-    (if (< (count sorted) (count g))
-      (throw (ex-info "graph contains cycles" {:graph g}))
-      (reverse sorted))))
+  (let [g-ref (volatile! (transform g))
+        sorted (ArrayDeque. (count g))]
+    (doseq [[k v] g]
+      (when-not (::mark v)
+        (visit sorted g-ref k)))
+    (vec sorted)))
+

@@ -3,4 +3,4 @@
   :url "http://github.com/danboykis/abk"
   :license {:name "Unlicense"
             :url "http://unlicense.org/"}
-  :dependencies [[org.clojure/clojure "1.9.0-alpha17"]])
+  :dependencies [[org.clojure/clojure "1.10.1"]])

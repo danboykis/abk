@@ -38,11 +38,12 @@
       (apply-exclusions exclusions)))
 
 (defn start-state! [{:keys [state-ref blueprint info warn] :or {info println warn println}} o]
-  (info "starting: " o)
+  (info "start issued: " o)
   (when (contains? blueprint o)
     (when-let [start-fn! (get-in blueprint [o ::start])]
       (try
         (let [started-state (start-fn! state-ref)]
+          (info "started: " o)
           (swap! state-ref assoc o started-state))
         (catch Exception ex
           (warn ex (str "Failed to start: " o))
@@ -61,12 +62,12 @@
 
 (defn stop-state! [{:keys [state-ref blueprint info warn] :or {info println warn println}} o]
   (let [s @state-ref]
-    (info "stopping: " o)
+    (info "stop issued for: " o)
     (when (contains? blueprint o)
       (when-let [stop-fn! (get-in blueprint [o ::stop])]
         (try
           (stop-fn! (get s o))
-          (info "---\t" o)
+          (info "stopped: " o)
           (swap! state-ref dissoc o)
           (catch Exception ex
             (warn ex (str "Failed to stop: " o))

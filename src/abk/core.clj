@@ -49,6 +49,8 @@
           (warn ex (str "Failed to start: " o))
           (throw ex))))))
 
+(declare stop!)
+
 (defn start! [{:keys [state-ref blueprint info warn] :or {info println
                                                           warn println}
                :as m}
@@ -56,14 +58,18 @@
 
   (let [blueprint   (process-blueprint blueprint exclusions)
         start-order (reverse (graph-sort blueprint))]
-    (doseq [o start-order]
-      (start-state! (assoc m :blueprint blueprint) o))
+    (try
+      (doseq [o start-order]
+        (start-state! (assoc m :blueprint blueprint) o))
+      (catch Exception e
+        (warn "aborting start sequence..." e)
+        (stop! m)))
     (keys @state-ref)))
 
 (defn stop-state! [{:keys [state-ref blueprint info warn] :or {info println warn println}} o]
   (let [s @state-ref]
     (info "stop issued for: " o)
-    (when (contains? blueprint o)
+    (when (and (contains? blueprint o) (contains? s o))
       (when-let [stop-fn! (get-in blueprint [o ::stop])]
         (try
           (stop-fn! (get s o))
@@ -91,7 +97,7 @@
       :else (boolean (some (partial depends-on? blueprint state) deps)))))
 
 (defn restart-state! [{:keys [blueprint state state-ref info warn] :or {info println
-                                                              warn           println}
+                                                                        warn println}
                        :as   m}
                       & exclusions]
 
@@ -105,3 +111,13 @@
                                     :state-ref state-ref)]
     (stop! stripped-blueprint)
     (start! stripped-blueprint)))
+
+(defn start-one! [{:keys [blueprint state state-ref info warn] :or {info println warn println}}]
+  (let [all-deps (fn get-dependents [states]
+                   (if (empty? states)
+                     []
+                     (let [ds (filter some? (mapcat #(get-in blueprint [% ::deps]) states))]
+                       (vec (concat (get-dependents ds) ds)))))]
+    (doseq [dep (conj (all-deps [state]) state)]
+      (start-state! {:blueprint blueprint :state-ref state-ref} dep))
+    (keys @state-ref)))

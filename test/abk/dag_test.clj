@@ -16,14 +16,11 @@
                :2 {:abk.core/deps [:3]}
                :3 {:abk.core/deps [:4]}})
 
-(defn idx-of [e xs]
-  (ffirst (filter (fn [[_ x]] (= e x)) (map-indexed vector xs))))
-
 (defn test-sorted [g sorted]
   (loop [[head & tail] sorted]
     (if (nil? head)
       ::sorted
-      (if (every? #(< (idx-of head sorted) (idx-of % sorted)) (-> (get g head) :abk.core/deps))
+      (if (every? #(< (.indexOf sorted head ) (.indexOf sorted %)) (-> (get g head) :abk.core/deps))
         (recur tail)
         (throw (ex-info (str "sorted: " sorted ", started: " head "\nbad sort at: " head) g))))))
 

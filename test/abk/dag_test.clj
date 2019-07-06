@@ -16,16 +16,16 @@
                :2 {:abk.core/deps [:3]}
                :3 {:abk.core/deps [:4]}})
 
-(defn test-sorted [m sorted]
-  (loop [[head & tail] sorted
-         started #{}]
+(defn idx-of [e xs]
+  (ffirst (filter (fn [[_ x]] (= e x)) (map-indexed vector xs))))
+
+(defn test-sorted [g sorted]
+  (loop [[head & tail] sorted]
     (if (nil? head)
       ::sorted
-      (let [s (-> m (get head) :abk.core/deps)]
-        (if (or (nil? s) (every? started s))
-          (recur tail (conj started head))
-          (throw (ex-info (str "map: " m ", started: " started "\nbad sort at: " s " ," sorted) {})))))))
-
+      (if (every? #(< (idx-of head sorted) (idx-of % sorted)) (-> (get g head) :abk.core/deps))
+        (recur tail)
+        (throw (ex-info (str "sorted: " sorted ", started: " head "\nbad sort at: " head) g))))))
 
 (deftest sort-dag
   (testing "sort dag"
@@ -33,4 +33,4 @@
 
 (deftest sort-easy
   (testing "sort easy dag"
-    (is (= (graph-sort easy-dag) (reverse [:1 :2 :3 :4])))))
+    (is (= (graph-sort easy-dag) [:1 :2 :3 :4]))))

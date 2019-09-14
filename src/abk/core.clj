@@ -55,7 +55,7 @@
                                                           warn println}
                :as m}
               & exclusions]
-
+  {:pre [(some? state-ref) (some? blueprint)]}
   (let [blueprint   (process-blueprint blueprint exclusions)
         start-order (reverse (graph-sort blueprint))]
     (try
@@ -84,6 +84,7 @@
                                                warn println}
               :as m}
              & exclusions]
+  {:pre [(some? blueprint)]}
   (let [blueprint  (process-blueprint blueprint exclusions)
         stop-order (graph-sort blueprint)]
     (doseq [o stop-order]
@@ -100,7 +101,7 @@
                                                                         warn println}
                        :as   m}
                       & exclusions]
-
+  {:pre [(some? blueprint) (some? state) (some? state-ref)]}
   (let [blueprint (process-blueprint blueprint exclusions)
         potential-stop-states (into []
                                     (take-while (complement #{state}))
@@ -113,6 +114,7 @@
     (start! stripped-blueprint)))
 
 (defn start-one! [{:keys [blueprint state state-ref info warn] :or {info println warn println}}]
+  {:pre [(some? blueprint) (some? state) (some? state-ref)]}
   (let [all-deps (fn get-dependents [states]
                    (if (empty? states)
                      []

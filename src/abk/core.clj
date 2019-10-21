@@ -63,7 +63,8 @@
         (start-state! (assoc m :blueprint blueprint) o))
       (catch Exception e
         (warn "aborting start sequence..." e)
-        (stop! m)))
+        (stop! m)
+        (throw e)))
     (keys @state-ref)))
 
 (defn stop-state! [{:keys [state-ref blueprint info warn] :or {info println warn println}} o]

@@ -3,13 +3,17 @@
             [clojure.spec.alpha :as s]))
 
 (s/def ::blueprint (s/map-of keyword? ::state))
-(s/def ::state (s/keys :req [::start] :opt [::stop ::deps]))
+(s/def ::state (s/keys :req [::start] :opt [::stop ::deps ::rw]))
 (s/def ::start ifn?)
 (s/def ::stop  ifn?)
+(s/def ::rw    boolean?)
 (s/def ::deps  (s/and (s/or :explicit-deps (s/coll-of keyword? :into #{})
                             :implicit-deps #(= ::everything %))
                       (s/conformer second)))
 
+(deftype ROView [ref]
+  clojure.lang.IDeref
+  (deref [_] @ref))
 
 (defn- apply-exclusions [blueprint exclusions]
   (let [bp (apply dissoc blueprint exclusions)]
@@ -37,12 +41,12 @@
       (expand-deps ::everything)
       (apply-exclusions exclusions)))
 
-(defn start-state! [{:keys [state-ref blueprint info warn] :or {info println warn println}} o]
+(defn start-state! [{:keys [state-ref state-ro blueprint info warn] :or {info println warn println}} o]
   (info "start issued: " o)
   (when (contains? blueprint o)
     (when-let [start-fn! (get-in blueprint [o ::start])]
       (try
-        (let [started-state (start-fn! state-ref)]
+        (let [started-state (start-fn! (if (get-in blueprint [o ::rw]) state-ref state-ro))]
           (info "started: " o)
           (swap! state-ref assoc o started-state))
         (catch Exception ex
@@ -56,16 +60,17 @@
                :as m}
               & exclusions]
   {:pre [(some? state-ref) (some? blueprint)]}
-  (let [blueprint   (process-blueprint blueprint exclusions)
+  (let [state-ro    (ROView. state-ref)
+        blueprint   (process-blueprint blueprint exclusions)
         start-order (reverse (graph-sort blueprint))]
     (try
       (doseq [o start-order]
-        (start-state! (assoc m :blueprint blueprint) o))
+        (start-state! (assoc m :blueprint blueprint :state-ro state-ro) o))
       (catch Exception e
         (warn "aborting start sequence..." e)
         (stop! m)
         (throw e)))
-    (keys @state-ref)))
+    state-ro))
 
 (defn stop-state! [{:keys [state-ref blueprint info warn] :or {info println warn println}} o]
   (let [s @state-ref]

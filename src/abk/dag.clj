@@ -1,18 +1,22 @@
 (ns abk.dag
   (:import [java.util ArrayDeque]))
 
-(defn- visit [sorted g-ref node]
+(defn- visit [^ArrayDeque sorted g-ref node]
   (let [node-v (get @g-ref node)]
-    (cond (= ::perm (::mark node-v)) sorted
-          (= ::temp (::mark node-v))
-          (throw (ex-info "invalid dag" {node (dissoc node-v ::mark)}))
-          :else
-          (do
-            (vswap! g-ref assoc-in [node ::mark] ::temp)
-            (doseq [dep-node (get node-v :abk.core/deps)]
-                (visit sorted g-ref dep-node))
-            (vswap! g-ref assoc-in [node ::mark] ::perm)
-            (.addFirst sorted node)))))
+    (cond
+      (= ::perm (::mark node-v))
+      sorted
+
+      (= ::temp (::mark node-v))
+      (throw (ex-info "invalid dag" {node (dissoc node-v ::mark)}))
+
+      :else
+      (do
+        (vswap! g-ref assoc-in [node ::mark] ::temp)
+        (doseq [dep-node (get node-v :abk.core/deps)]
+          (visit sorted g-ref dep-node))
+        (vswap! g-ref assoc-in [node ::mark] ::perm)
+        (.addFirst sorted node)))))
 
 (defn- transform [g]
   (let [ks (set (keys g))]

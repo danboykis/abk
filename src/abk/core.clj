@@ -15,7 +15,7 @@
   clojure.lang.IDeref
   (deref [_] @ref))
 
-(defn- apply-exclusions [blueprint exclusions]
+(defn ^:private apply-exclusions [blueprint exclusions]
   (let [bp (apply dissoc blueprint exclusions)]
     (into bp (map (fn [[k {::keys [deps] :as v}]]
                     (if (empty? deps)
@@ -28,20 +28,30 @@
       (throw (ex-info "bad blueprint" (s/explain-data ::blueprint blueprint)))
       bp)))
 
-(defn- expand-deps [m everything]
+(defn ^:private expand-deps [m everything]
   (into (empty m) (map (fn [[k {::keys [deps] :as v}]]
                          [k (if (= everything deps)
                               (assoc v ::deps (disj (set (keys m)) k))
                               v)]))
         m))
 
+(defn check-consistency [blueprint]
+  (let [deps (set (keys blueprint))]
+    (reduce-kv (fn [accum k v]
+                 (if-some [dangling-dep (first (drop-while deps (::deps v)))]
+                   (throw (ex-info (str "unreferenced dep: " dangling-dep) {k (select-keys v [::deps])}))
+                   (assoc accum k v)))
+               (empty blueprint)
+               blueprint)))
+
 (defn process-blueprint [blueprint exclusions]
   (-> blueprint
       validate
       (expand-deps ::everything)
+      check-consistency
       (apply-exclusions exclusions)))
 
-(defn start-state! [{:keys [state-ref state-ro blueprint info warn] :or {info println warn println}} o]
+(defn ^:private start-state! [{:keys [state-ref state-ro blueprint info warn] :or {info println warn println}} o]
   (info "start issued: " o)
   (when (contains? blueprint o)
     (when-let [start-fn! (get-in blueprint [o ::start])]
@@ -103,6 +113,18 @@
       (contains? deps state) true
       :else (boolean (some (partial depends-on? blueprint state) deps)))))
 
+(defn start-one! [{:keys [blueprint state state-ref info warn] :or {info println warn println}}]
+  {:pre [(some? blueprint) (some? state) (some? state-ref)]}
+  (let [state-ro (ROView. state-ref)
+        all-deps (fn get-dependents [states]
+                   (if (empty? states)
+                     []
+                     (let [ds (filter some? (mapcat #(get-in blueprint [% ::deps]) states))]
+                       (vec (concat (get-dependents ds) ds)))))]
+    (doseq [dep (conj (all-deps [state]) state)]
+      (start-state! {:blueprint blueprint :state-ref state-ref :state-ro state-ro} dep))
+    state-ro))
+
 (defn restart-state! [{:keys [blueprint state state-ref info warn] :or {info println
                                                                         warn println}
                        :as   m}
@@ -112,20 +134,7 @@
         potential-stop-states (into []
                                     (take-while (complement #{state}))
                                     (graph-sort blueprint))
+        stop-states (filterv (partial depends-on? blueprint state) (conj potential-stop-states state))]
+    (doseq [state stop-states] (stop-state! {:state-ref state-ref :blueprint blueprint} state))
+    (doseq [state (reverse stop-states)] (start-one! {:state-ref state-ref :blueprint blueprint :state state}))))
 
-        stop-states (filterv (partial depends-on? blueprint state) (conj potential-stop-states state))
-        stripped-blueprint (assoc m :blueprint (select-keys blueprint stop-states)
-                                    :state-ref state-ref)]
-    (stop! stripped-blueprint)
-    (start! stripped-blueprint)))
-
-(defn start-one! [{:keys [blueprint state state-ref info warn] :or {info println warn println}}]
-  {:pre [(some? blueprint) (some? state) (some? state-ref)]}
-  (let [all-deps (fn get-dependents [states]
-                   (if (empty? states)
-                     []
-                     (let [ds (filter some? (mapcat #(get-in blueprint [% ::deps]) states))]
-                       (vec (concat (get-dependents ds) ds)))))]
-    (doseq [dep (conj (all-deps [state]) state)]
-      (start-state! {:blueprint blueprint :state-ref state-ref} dep))
-    (keys @state-ref)))

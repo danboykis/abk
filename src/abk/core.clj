@@ -136,5 +136,6 @@
                                     (graph-sort blueprint))
         stop-states (filterv (partial depends-on? blueprint state) (conj potential-stop-states state))]
     (doseq [state stop-states] (stop-state! {:state-ref state-ref :blueprint blueprint} state))
-    (doseq [state (reverse stop-states)] (start-one! {:state-ref state-ref :blueprint blueprint :state state}))))
+    (doseq [state (reverse stop-states)] (start-state! {:state-ref state-ref :blueprint blueprint :state-ro (ROView. state-ref)}
+                                                       state))))
 

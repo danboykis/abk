@@ -82,18 +82,19 @@
         (throw e)))
     state-ro))
 
-(defn stop-state! [{:keys [state-ref blueprint info warn] :or {info println warn println}} o]
+(defn ^:private stop-state! [{:keys [state-ref blueprint info warn] :or {info println warn println}} o]
   (let [s @state-ref]
     (info "stop issued for: " o)
     (when (and (contains? blueprint o) (contains? s o))
-      (when-let [stop-fn! (get-in blueprint [o ::stop])]
+      (if-let [stop-fn! (get-in blueprint [o ::stop])]
         (try
           (stop-fn! (get s o))
           (info "stopped: " o)
           (swap! state-ref dissoc o)
           (catch Exception ex
             (warn ex (str "Failed to stop: " o))
-            (throw ex)))))))
+            (throw ex)))
+        (swap! state-ref dissoc o)))))
 
 
 (defn stop! [{:keys [blueprint info warn] :or {info println
@@ -113,16 +114,18 @@
       (contains? deps state) true
       :else (boolean (some (partial depends-on? blueprint state) deps)))))
 
-(defn start-one! [{:keys [blueprint state state-ref info warn] :or {info println warn println}}]
+(defn start-one! [{:keys [blueprint state state-ref info warn] :or {info println warn println} :as m}]
   {:pre [(some? blueprint) (some? state) (some? state-ref)]}
-  (let [state-ro (ROView. state-ref)
-        all-deps (fn get-dependents [states]
-                   (if (empty? states)
-                     []
-                     (let [ds (filter some? (mapcat #(get-in blueprint [% ::deps]) states))]
-                       (vec (concat (get-dependents ds) ds)))))]
+  (let [state-ro  (ROView. state-ref)
+        blueprint (process-blueprint blueprint #{})
+        all-deps  (fn get-dependents [states]
+                    (if (empty? states)
+                      []
+                      (let [ds (filter some? (mapcat #(get-in blueprint [% ::deps]) states))]
+                        (vec (concat (get-dependents ds) ds)))))]
+
     (doseq [dep (conj (all-deps [state]) state)]
-      (start-state! {:blueprint blueprint :state-ref state-ref :state-ro state-ro} dep))
+      (start-state! (assoc m :blueprint blueprint :state-ro state-ro) dep))
     state-ro))
 
 (defn restart-state! [{:keys [blueprint state state-ref info warn] :or {info println
@@ -131,11 +134,11 @@
                       & exclusions]
   {:pre [(some? blueprint) (some? state) (some? state-ref)]}
   (let [blueprint (process-blueprint blueprint exclusions)
+        state-ro (ROView. state-ref)
         potential-stop-states (into []
                                     (take-while (complement #{state}))
                                     (graph-sort blueprint))
         stop-states (filterv (partial depends-on? blueprint state) (conj potential-stop-states state))]
     (doseq [state stop-states] (stop-state! {:state-ref state-ref :blueprint blueprint} state))
-    (doseq [state (reverse stop-states)] (start-state! {:state-ref state-ref :blueprint blueprint :state-ro (ROView. state-ref)}
-                                                       state))))
+    (doseq [state (reverse stop-states)] (start-state! (assoc m :blueprint blueprint :state-ro state-ro) state))))
 

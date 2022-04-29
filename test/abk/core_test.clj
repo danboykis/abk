@@ -15,11 +15,19 @@
                 :state/four {::abk/start (fn [s] (println "[start] state/four -> " @s) 4)
                              ::abk/stop (fn [x] (println "[stop] state/four -> " x))}})
 
+(defn test-sorted [g sorted]
+  (println sorted)
+  (loop [[head & tail] sorted]
+    (if (nil? head)
+      ::sorted
+      (if (every? #(< (.indexOf sorted head ) (.indexOf sorted %)) (-> (get g head) :abk.core/deps))
+        (recur tail)
+        (throw (ex-info (str "sorted: " sorted ", started: " head "\nbad sort at: " head) g))))))
 
 (deftest start-states
   (testing "starting blueprint"
     (let [s (atom nil)]
-      (is (= (keys blueprint) (keys @(abk/start! {:blueprint blueprint :state-ref s}))))
+      (is (every? (set (keys blueprint)) (keys @(abk/start! {:blueprint blueprint :state-ref s}))))
       (is (= (:state/one   @s) 1))
       (is (= (:state/two   @s) 2))
       (is (= (:state/three @s) 3))

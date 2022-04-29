@@ -3,20 +3,25 @@
             [abk.dag :refer :all]
             [clojure.set :as s]))
 
-(def graph {:5  {:abk.core/deps [:11]}
+(def graph {:foobar {}
+            :5  {:abk.core/deps [:11]}
+            :2  {}
             :7  {:abk.core/deps [:11 :8]}
             :11 {:abk.core/deps [:2 :9 :10]}
             :8  {:abk.core/deps [:9]}
             :3  {:abk.core/deps [:8 :10]}
-            :2  {}
+            :baz {}
+            :cool {}
             :9  {}
             :10 {}})
 
 (def easy-dag {:1 {:abk.core/deps [:2]}
                :2 {:abk.core/deps [:3]}
-               :3 {:abk.core/deps [:4]}})
+               :3 {:abk.core/deps [:4]}
+               :4 {:abk.core/deps []}})
 
 (defn test-sorted [g sorted]
+  (println sorted)
   (loop [[head & tail] sorted]
     (if (nil? head)
       ::sorted
@@ -26,8 +31,8 @@
 
 (deftest sort-dag
   (testing "sort dag"
-    (is (= ::sorted (test-sorted graph (graph-sort graph))))))
+    (test-sorted graph (topo-sort graph))))
 
 (deftest sort-easy
   (testing "sort easy dag"
-    (is (= (graph-sort easy-dag) [:1 :2 :3 :4]))))
+    (is (= (topo-sort easy-dag) [:1 :2 :3 :4]))))

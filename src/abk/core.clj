@@ -1,5 +1,5 @@
 (ns abk.core
-  (:require [abk.dag :refer [graph-sort]]
+  (:require [abk.dag :as dag]
             [clojure.spec.alpha :as s]))
 
 (s/def ::blueprint (s/map-of keyword? ::state))
@@ -72,7 +72,7 @@
   {:pre [(some? state-ref) (some? blueprint)]}
   (let [state-ro    (ROView. state-ref)
         blueprint   (process-blueprint blueprint exclusions)
-        start-order (reverse (graph-sort blueprint))]
+        start-order (reverse (dag/topo-sort blueprint))]
     (try
       (doseq [o start-order]
         (start-state! (assoc m :blueprint blueprint :state-ro state-ro) o))
@@ -103,7 +103,7 @@
              & exclusions]
   {:pre [(some? blueprint)]}
   (let [blueprint  (process-blueprint blueprint exclusions)
-        stop-order (graph-sort blueprint)]
+        stop-order (dag/topo-sort blueprint)]
     (doseq [o stop-order]
       (stop-state! (assoc m :blueprint blueprint) o))))
 
@@ -137,7 +137,7 @@
         state-ro (ROView. state-ref)
         potential-stop-states (into []
                                     (take-while (complement #{state}))
-                                    (graph-sort blueprint))
+                                    (dag/topo-sort blueprint))
         stop-states (filterv (partial depends-on? blueprint state) (conj potential-stop-states state))]
     (doseq [state stop-states] (stop-state! {:state-ref state-ref :blueprint blueprint} state))
     (doseq [state (reverse stop-states)] (start-state! (assoc m :blueprint blueprint :state-ro state-ro) state))))
